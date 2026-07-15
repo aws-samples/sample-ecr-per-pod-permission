@@ -1,0 +1,39 @@
+# team-b pulling from team-b/ namespace with IRSA SA — should SUCCEED ✅
+# Uses team-b-own-sa → IRSA → AssumeRoleWithWebIdentity → team-b/* access
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: team-b-own-sa
+  namespace: team-b
+  annotations:
+    eks.amazonaws.com/ecr-role-arn: ${IRSA_ROLE_ARN_TEAM_B}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: team-b-own
+  namespace: team-b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: team-b-own
+  template:
+    metadata:
+      labels:
+        app: team-b-own
+    spec:
+      tolerations:
+        - key: "ecr-pod-permission"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+      nodeSelector:
+        node.kubernetes.io/ecr-pod-permission: "true"
+      serviceAccountName: team-b-own-sa
+      containers:
+        - name: nginx
+          image: ${ECR_TEAM_B_REPO_URL}:latest
+          ports:
+            - containerPort: 80

@@ -1,0 +1,32 @@
+# team-b pulling from team-a/ namespace using default SA — should FAIL ❌
+# Uses default SA → no IRSA → falls back to node role
+# → ECR repo policy on team-a/nginxa denies node role → pull fails
+#
+# This proves: the node IAM role cannot pull private team images.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: team-b-cross-def
+  namespace: team-b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: team-b-cross-def
+  template:
+    metadata:
+      labels:
+        app: team-b-cross-def
+    spec:
+      tolerations:
+        - key: "ecr-pod-permission"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+      nodeSelector:
+        node.kubernetes.io/ecr-pod-permission: "true"
+      containers:
+        - name: nginx
+          image: ${ECR_TEAM_A_REPO_URL}:latest
+          ports:
+            - containerPort: 80

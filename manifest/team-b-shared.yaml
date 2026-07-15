@@ -1,0 +1,38 @@
+# team-b pulling from shared/ namespace — should SUCCEED ✅
+# Uses team-b-shared-sa (no ecr-role-arn annotation) → no IRSA → falls back to node role
+# → node role has shared/* access
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: team-b-shared-sa
+  namespace: team-b
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: team-b-shared
+  namespace: team-b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: team-b-shared
+  template:
+    metadata:
+      labels:
+        app: team-b-shared
+    spec:
+      tolerations:
+        - key: "ecr-pod-permission"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+      nodeSelector:
+        node.kubernetes.io/ecr-pod-permission: "true"
+      serviceAccountName: team-b-shared-sa
+      containers:
+        - name: nginx
+          image: ${ECR_SHARED_REPO_URL}:latest
+          ports:
+            - containerPort: 80

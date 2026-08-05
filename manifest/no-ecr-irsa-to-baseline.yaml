@@ -1,0 +1,33 @@
+# No ECR IRSA (default SA) pulling from baseline/ namespace — should SUCCEED ✅
+# Uses default SA → no IRSA → falls back to node role
+# → No ECR repo policy on baseline/app → node role pull succeeds
+#
+# This proves: without a repository policy, even the node role can pull —
+# the baseline behavior this demo mitigates with per-repo policies.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: no-ecr-irsa-to-baseline
+  namespace: no-ecr-irsa
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: no-ecr-irsa-to-baseline
+  template:
+    metadata:
+      labels:
+        app: no-ecr-irsa-to-baseline
+    spec:
+      tolerations:
+        - key: "ecr-pod-permission"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+      nodeSelector:
+        node.kubernetes.io/ecr-pod-permission: "true"
+      containers:
+        - name: app
+          image: ${ECR_BASELINE_REPO_URL}:latest
+          ports:
+            - containerPort: 80

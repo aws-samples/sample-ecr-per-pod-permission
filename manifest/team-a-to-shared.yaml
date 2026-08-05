@@ -1,27 +1,28 @@
 # team-a pulling from shared/ namespace — should SUCCEED ✅
-# Uses team-a-shared-sa (no ecr-role-arn annotation) → no IRSA → falls back to node role
-# → node role has shared/* access
+# Uses team-a IRSA role → shared/app repo policy allows team-a role → pull succeeds
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: team-a-shared-sa
+  name: sa-team-a-to-shared
   namespace: team-a
+  annotations:
+    eks.amazonaws.com/ecr-role-arn: ${IRSA_ROLE_ARN_TEAM_A}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: team-a-shared
+  name: team-a-to-shared
   namespace: team-a
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: team-a-shared
+      app: team-a-to-shared
   template:
     metadata:
       labels:
-        app: team-a-shared
+        app: team-a-to-shared
     spec:
       tolerations:
         - key: "ecr-pod-permission"
@@ -30,9 +31,9 @@ spec:
           effect: "NoSchedule"
       nodeSelector:
         node.kubernetes.io/ecr-pod-permission: "true"
-      serviceAccountName: team-a-shared-sa
+      serviceAccountName: sa-team-a-to-shared
       containers:
-        - name: nginx
+        - name: app
           image: ${ECR_SHARED_REPO_URL}:latest
           ports:
             - containerPort: 80

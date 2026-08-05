@@ -7,3 +7,8 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: team-b
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: no-ecr-irsa

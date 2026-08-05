@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # IRSA Role — team-a: identity for team-a pods
-# ECR pull permissions come from the repo policy on team-a/*, not this role.
-# This role only needs ecr:GetAuthorizationToken (account-level, not repo-scoped).
+# Uses AWS-managed AmazonEC2ContainerRegistryPullOnly policy.
+# Per-repo scoping is enforced via ECR repository policies.
 # -----------------------------------------------------------------------------
 
 resource "aws_iam_role" "irsa_ecr_team_a" {
@@ -24,29 +24,15 @@ resource "aws_iam_role" "irsa_ecr_team_a" {
   })
 }
 
-resource "aws_iam_policy" "irsa_ecr_team_a" {
-  name = "${var.cluster_name}-irsa-ecr-team-a"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = ["ecr:GetAuthorizationToken"]
-        Resource = "*"
-      }
-    ]
-  })
-}
-
 resource "aws_iam_role_policy_attachment" "irsa_ecr_team_a" {
   role       = aws_iam_role.irsa_ecr_team_a.name
-  policy_arn = aws_iam_policy.irsa_ecr_team_a.arn
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly"
 }
 
 # -----------------------------------------------------------------------------
 # IRSA Role — team-b: identity for team-b pods
-# ECR pull permissions come from the repo policy on team-b/*, not this role.
-# This role only needs ecr:GetAuthorizationToken (account-level, not repo-scoped).
+# Uses AWS-managed AmazonEC2ContainerRegistryPullOnly policy.
+# Per-repo scoping is enforced via ECR repository policies.
 # -----------------------------------------------------------------------------
 
 resource "aws_iam_role" "irsa_ecr_team_b" {
@@ -69,21 +55,7 @@ resource "aws_iam_role" "irsa_ecr_team_b" {
   })
 }
 
-resource "aws_iam_policy" "irsa_ecr_team_b" {
-  name = "${var.cluster_name}-irsa-ecr-team-b"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = ["ecr:GetAuthorizationToken"]
-        Resource = "*"
-      }
-    ]
-  })
-}
-
 resource "aws_iam_role_policy_attachment" "irsa_ecr_team_b" {
   role       = aws_iam_role.irsa_ecr_team_b.name
-  policy_arn = aws_iam_policy.irsa_ecr_team_b.arn
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly"
 }

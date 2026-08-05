@@ -1,10 +1,10 @@
 # Per-Pod Amazon ECR Image Pull Permissions on Amazon EKS
 
-Scope Amazon ECR image pull permissions to individual Kubernetes pods using per-pod credential providers and ECR repository policies. Different workloads on the same node get different ECR access — no blanket node-level permissions for team-scoped repositories.
+Scope Amazon ECR image pull permissions to individual Kubernetes pods using per-pod credentials and ECR repository policies. Different workloads on the same node get different ECR access without blanket node-level permissions.
 
 ## Problem
 
-By default, every pod on an Amazon EKS node shares the same image pull credentials — the node's IAM role. If the node can pull an image, any pod on that node can too. There's no way to say "this pod can pull from repo A but not repo B."
+By default, every pod on an Amazon EKS node shares the same image pull credentials (the node's IAM role). If the node can pull an image, any pod on that node can too. There's no way to say "this pod can pull from repo A but not repo B."
 
 This matters when teams share a cluster but own separate ECR repositories. A pod in team-a's namespace shouldn't be able to pull team-b's container images, even if they run on the same node.
 
@@ -14,18 +14,24 @@ This approach uses Kubernetes [KEP 4412](https://www.kubernetes.dev/resources/ke
 
 Two enforcement layers work together:
 
-**1. Per-pod credentials — kubelet + ecr-credential-provider**
+**1. Per-pod credentials (kubelet + ecr-credential-provider)**
 
 Kubelet `CredentialProviderConfig` is updated with `tokenAttributes` at node boot. This configures the kubelet to pass ServiceAccount tokens to the ECR credential provider for all image pulls. The provider then decides internally which credentials to use:
 
 - If the pod's Service Account has an `eks.amazonaws.com/ecr-role-arn` annotation → call AWS Security Token Service (AWS STS) `AssumeRoleWithWebIdentity` with the Service Account token → use the assumed role's credentials for ECR.
-- If the pod's Service Account has no `ecr-role-arn` annotation → fall back to the node's IAM role via IMDS (same behavior as before KEP 4412).
+- If the pod's Service Account doesn't have `ecr-role-arn` annotation → fall back to the node's IAM role (same behavior as before KEP 4412).
 
-This means existing workloads and system pods (VPC CNI, kube-proxy, CoreDNS) continue to work unchanged — they don't have the `ecr-role-arn` annotation, so the provider falls back to the node role.
+Existing workloads and system pods (VPC CNI, kube-proxy, CoreDNS) continue to work unchanged because they don't have the `ecr-role-arn` annotation, so the provider falls back to the node role.
 
-**2. Repository-level deny — ECR repo policies**
+**2. Repository-level deny (ECR repo policies)**
 
-Each team's ECR repository has a resource-based policy that explicitly denies all principals except the team's IRSA role (and an admin role for management). This blocks the node role and other teams' roles from pulling team images.
+Each team's ECR repository manages access using a repository policy that explicitly denies all principals except the team's ECR IRSA role. This blocks the node role and other teams' roles from pulling private team images.
+
+Four ECR repositories illustrate this feature:
+- **team-a/app:** Repository policy denies all principals except team-a's ECR IRSA role
+- **team-b/app:** Repository policy denies all principals except team-b's ECR IRSA role
+- **shared/app:** Repository policy allows both team-a and team-b ECR IRSA roles
+- **baseline/app:** Default - No repository policy (any AWS principal can pull images, including EKS node role)
 
 ## Architecture
 
@@ -40,40 +46,41 @@ Pod with ecr-role-arn annotation (team a/b service account):
     ├─ kubelet passes SA token to ecr-credential-provider
     │  → provider sees ecr-role-arn annotation on SA
     │  → calls STS AssumeRoleWithWebIdentity
-    │  → gets credentials scoped to team IRSA role
-    │  → ECR repo policy allows pull from team's own repo ✅
-    │  → ECR repo policy denies pull from cross team repo ❌
+    │  → gets credentials scoped to team ECR role
+    │    → access to team's own repo: repo policy allows → pull succeeds ✅
+    │    → access to shared repo: repo policy allows both teams → pull succeeds ✅
+    │    → access to other team's repo: repo policy denies → pull fails ❌
+    │    → baseline repo: no repo policy → pull succeeds ✅
     │
 Pod without ecr-role-arn annotation (default SA):
     │
     ├─ kubelet passes SA token to ecr-credential-provider
     │  → provider sees NO ecr-role-arn annotation
-    │  → falls back to node role via IMDS
-    │  → shared/* repos: no repo policy → pull succeeds ✅
-    │  → team* repos: repo policy denies node role → pull fails ❌
+    │  → falls back to node role
+    │    → access to baseline repo: no repo policy → pull succeeds ✅
+    │    → access to shared repo: repo policy denies node role → pull fails ❌
+    │    → access to team repos: repo policy denies node role → pull fails ❌
 ```
 
 ### Requirements
 
 Three requirements must be met for per-pod credentials to work:
 
-1. **Kubernetes >= 1.34** — The `KubeletServiceAccountTokenForCredentialProviders` feature gate is beta and enabled by default starting in 1.34. This is what allows the kubelet to project SA tokens to credential providers.
-2. **ECR credential provider with `tokenAttributes` support** — The provider must understand the `tokenAttributes` config and the `ecr-role-arn` annotation. Available in [cloud-provider-aws PR #1155](https://github.com/kubernetes/cloud-provider-aws/pull/1155) or later. EKS nodes running K8s 1.34+ include this version.
-3. **RBAC audience permission applied before nodes join** — The kubelet needs permission to request SA tokens with the `sts.amazonaws.com` audience. Without the ClusterRole/ClusterRoleBinding in place, the kubelet cannot project tokens and **all image pulls fail**, including system pods. The node will not become Ready.
+1. **Kubernetes >= 1.34.** The `KubeletServiceAccountTokenForCredentialProviders` feature gate is beta and enabled by default starting in 1.34. This is what allows the kubelet to project SA tokens to credential providers.
+2. **ECR credential provider with `tokenAttributes` support.** The provider must understand the `tokenAttributes` config and the `ecr-role-arn` annotation. Available in [cloud-provider-aws PR #1155](https://github.com/kubernetes/cloud-provider-aws/pull/1155) or later. EKS nodes running K8s 1.34+ include this version.
+3. **RBAC audience permission applied before nodes join.** The kubelet needs permission to request SA tokens with the `sts.amazonaws.com` audience. Without the ClusterRole/ClusterRoleBinding in place, the kubelet cannot project tokens and **all image pulls fail**, including system pods. The node will not become Ready.
 
 ## Demo
 
 The Terraform configuration creates:
 
-- **Amazon Virtual Private Cloud (Amazon VPC)** — 2 AZs, public/private subnets, single NAT gateway
-- **EKS cluster** — managed control plane with kube-proxy and vpc-cni addons
-- **CoreDNS addon** — deployed as an independent resource after the node group is available
-- **Managed node group** — AL2023 nodes with UserData that writes a `CredentialProviderConfig` with `tokenAttributes` for per-pod ECR credentials
-- **RBAC** — ClusterRole and ClusterRoleBinding granting kubelet permission to project SA tokens with the `sts.amazonaws.com` audience (must exist before nodes join)
-- **ECR repositories** — `shared/nginx`, `team-a/nginxa`, `team-b/nginxb` (KMS encrypted, scan-on-push enabled)
-- **ECR repository policies** — `team-a/nginxa` and `team-b/nginxb` deny all (`ecr:*`) except their IRSA role and an Admin push role
-- **IRSA roles** — one per team, with OIDC trust (namespace-scoped `StringLike`) and `ecr:GetAuthorizationToken`
-- **Node IAM policy** — broad ECR pull (team repos protected by repo-level deny)
+- **Amazon Virtual Private Cloud (Amazon VPC):** 2 AZs, public/private subnets, single NAT gateway
+- **EKS cluster:** managed control plane with EKS addons: kube-proxy, vpc-cni, coredns
+- **Managed node group:** AL2023 nodes with UserData that writes a `CredentialProviderConfig` with `tokenAttributes` to enable per-pod ECR credentials
+- **RBAC:** ClusterRole and ClusterRoleBinding granting kubelet permission to project SA tokens with the `sts.amazonaws.com` audience (must exist before nodes join)
+- **ECR repositories:** `shared/app`, `team-a/app`, `team-b/app`, `baseline/app` 
+- **ECR repository policies:** `team-a/app`, `team-b/app`, and `shared/app` deny all (`ecr:*`) except their allowed ECR IRSA roles and an Admin push role. `baseline/app` has **no** repository policy, showing the default behavior without protection.
+- **ECR IRSA roles:** one per team, with OIDC trust (namespace-scoped `StringLike`) and same ECR pull permissions as EKS nodes.
 
 ### Prerequisites
 
@@ -103,7 +110,7 @@ Edit `infra-tf/terraform.tfvars`:
 ./scripts/create-infra.sh
 ```
 
-This creates the VPC, EKS cluster, managed node group with the credential provider config, ECR repositories with repo policies, and IRSA roles. Requires `yes` to confirm.
+This creates the VPC, EKS cluster, managed node group with the credential provider config, ECR repositories with repo policies, and IRSA roles.
 
 ### 3. Configure kubectl
 
@@ -117,9 +124,9 @@ $(terraform -chdir=infra-tf output -raw configure_kubectl)
 ./scripts/build-push-images.sh
 ```
 
-This auto-detects your container runtime (docker, podman, or finch), authenticates to ECR, and pushes nginx to all three repos: `shared/nginx`, `team-a/nginxa`, `team-b/nginxb`.
+This auto-detects your container runtime (docker, podman, or finch), authenticates to ECR, and pushes nginx to all four repos: `shared/app`, `team-a/app`, `team-b/app`, `baseline/app`.
 
-### 5. Deploy manifests
+### 5. Deploy test manifests
 
 ```bash
 ./scripts/apply-manifests.sh
@@ -135,6 +142,9 @@ kubectl get pods -n team-a
 echo ""
 echo "=== team-b ==="
 kubectl get pods -n team-b
+echo ""
+echo "=== no-ecr-irsa (node role fallback) ==="
+kubectl get pods -n no-ecr-irsa
 ```
 
 <details>
@@ -143,79 +153,83 @@ kubectl get pods -n team-b
 ```
 === team-a ===
 NAME                              READY   STATUS             RESTARTS   AGE
-team-a-own-xxxxx                  1/1     Running            0          2m
-team-a-cross-xxxxx                0/1     ImagePullBackOff   0          2m
-team-a-shared-xxxxx               1/1     Running            0          2m
+team-a-to-own-xxxxx               1/1     Running            0          2m
+team-a-to-team-b-xxxxx            0/1     ImagePullBackOff   0          2m
+team-a-to-shared-xxxxx            1/1     Running            0          2m
+team-a-to-baseline-xxxxx          1/1     Running            0          2m
 
 === team-b ===
 NAME                              READY   STATUS             RESTARTS   AGE
-team-b-own-xxxxx                  1/1     Running            0          2m
-team-b-cross-xxxxx                0/1     ImagePullBackOff   0          2m
-team-b-shared-xxxxx               1/1     Running            0          2m
-team-b-shared-def-xxxxx           1/1     Running            0          2m
-team-b-cross-def-xxxxx            0/1     ImagePullBackOff   0          2m
+team-b-to-own-xxxxx               1/1     Running            0          2m
+team-b-to-team-a-xxxxx            0/1     ImagePullBackOff   0          2m
+team-b-to-shared-xxxxx            1/1     Running            0          2m
+team-b-to-baseline-xxxxx          1/1     Running            0          2m
+
+=== no-ecr-irsa (node role fallback) ===
+NAME                              READY   STATUS             RESTARTS   AGE
+no-ecr-irsa-to-team-a-xxxxx      0/1     ImagePullBackOff   0          2m
+no-ecr-irsa-to-shared-xxxxx      0/1     ImagePullBackOff   0          2m
+no-ecr-irsa-to-baseline-xxxxx    1/1     Running            0          2m
 ```
 
 </details>
 
-Eight pods across multiple scenarios demonstrate per-pod credential isolation and node role fallback.
+Eleven pods across three identity types demonstrate per-pod credential isolation. The `baseline/app` repository acts as a control with no ECR repository policy, showing the default behavior where any AWS principal can pull. The protected repos (`team-a/app`, `team-b/app`, `shared/app`) show how repository policies enforce team-level isolation.
 
-Each workload has its own ServiceAccount annotated with the team's IRSA role ARN. The IRSA role trust policy uses `StringLike` to allow any ServiceAccount within the team's namespace to assume the role — no need to update the trust policy when new workloads are added.
+Each team workload has its own ServiceAccount annotated with the team's ECR IRSA role ARN. The ECR IRSA role trust policy uses `StringLike` to allow any ServiceAccount within the team's namespace to assume the role, so you don't need to update the trust policy when new workloads are added. Just annotate your pod ServiceAccount with your team's ECR IRSA role and your workloads can pull from your private repositories.
 
 **Team A**
 
 | Deployment | ECR Image | ServiceAccount | Credential Used | Result |
 |---|---|---|---|---|
-| `team-a-own` | `team-a/nginxa` | `team-a-own-sa` | IRSA role (team-a) | ✅ Running |
-| `team-a-cross` | `team-b/nginxb` | `team-a-cross-sa` | IRSA role (team-a) | ❌ ErrImagePull - Image pull denied by repo policy |
-| `team-a-shared` | `shared/nginx` | `team-a-shared-sa` | IRSA role (team-a) | ✅ Running |
+| `team-a-to-own` | `team-a/app` | `sa-team-a-to-own` | IRSA role (team-a) | ✅ Running |
+| `team-a-to-team-b` | `team-b/app` | `sa-team-a-to-team-b` | IRSA role (team-a) | ❌ Denied by repo policy |
+| `team-a-to-shared` | `shared/app` | `sa-team-a-to-shared` | IRSA role (team-a) | ✅ Running |
+| `team-a-to-baseline` | `baseline/app` | `sa-team-a-to-baseline` | IRSA role (team-a) | ✅ Running |
 
 **Team B**
 
 | Deployment | ECR Image | ServiceAccount | Credential Used | Result |
 |---|---|---|---|---|
-| `team-b-own` | `team-b/nginxb` | `team-b-own-sa` | IRSA role (team-b) | ✅ Running |
-| `team-b-cross` | `team-a/nginxa` | `team-b-cross-sa` | IRSA role (team-b) | ❌ ErrImagePull - Image pull denied by repo policy |
-| `team-b-shared` | `shared/nginx` | `team-b-shared-sa` | IRSA role (team-b) | ✅ Running |
+| `team-b-to-own` | `team-b/app` | `sa-team-b-to-own` | IRSA role (team-b) | ✅ Running |
+| `team-b-to-team-a` | `team-a/app` | `sa-team-b-to-team-a` | IRSA role (team-b) | ❌ Denied by repo policy |
+| `team-b-to-shared` | `shared/app` | `sa-team-b-to-shared` | IRSA role (team-b) | ✅ Running |
+| `team-b-to-baseline` | `baseline/app` | `sa-team-b-to-baseline` | IRSA role (team-b) | ✅ Running |
 
-The results also show a successful fallback to the node IAM role. For pods that don't use any specific service account (inherit the default service account), access to shared repositories or any other ECR repository not controlled by an access policy is maintained. At the same time, accessing private repositories with the node IAM role is denied.
-
-**Node Role Fallback**
+**No ECR IRSA (default ServiceAccount, node role fallback)**
 
 | Deployment | ECR Image | ServiceAccount | Credential Used | Result |
 |---|---|---|---|---|
-| `team-b-shared-def` | `shared/nginx` | `default` | Node role (fallback) | ✅ Running |
-| `team-b-cross-def` | `team-a/nginxa` | `default` | Node role (fallback) | ❌ ErrImagePull - Image pull denied by repo policy |
+| `no-ecr-irsa-to-team-a` | `team-a/app` | `default` | Node role (fallback) | ❌ Denied by repo policy |
+| `no-ecr-irsa-to-shared` | `shared/app` | `default` | Node role (fallback) | ❌ Denied by repo policy |
+| `no-ecr-irsa-to-baseline` | `baseline/app` | `default` | Node role (fallback) | ✅ Running |
 
-The failure scenarios demonstrate that private team images are protected against **both** attack vectors:
-- **`team-a-cross`**: A pod with team-a's IRSA credentials tries to pull team-b's image → denied because the ECR repo policy only allows team-b's role.
-- **`team-b-cross`**: A pod with team-b's IRSA credentials tries to pull team-a's image → denied because the ECR repo policy only allows team-a's role.
-- **`team-b-cross-def`**: A pod with no IRSA (falls back to node role) tries to pull team-a's image → denied because the ECR repo policy only allows team-a's role.
+Pods without an ECR IRSA role annotation fall back to the node role, which can access the baseline repository but is denied access to protected team repositories.
 
 ### 7. Inspect the failures
 
 ECR repository policy denies cross-team access to private repositories.
 
 ```bash
-# team-a-cross: team-a IRSA role denied by team-b repo policy
-kubectl describe pod -l app=team-a-cross -n team-a | tail -10
+# team-a-to-team-b: team-a IRSA role denied by team-b repo policy
+kubectl describe pod -l app=team-a-to-team-b -n team-a | tail -10
 
-# team-b-cross: team-b IRSA role denied by team-a repo policy
-kubectl describe pod -l app=team-b-cross -n team-b | tail -10
+# team-b-to-team-a: team-b IRSA role denied by team-a repo policy
+kubectl describe pod -l app=team-b-to-team-a -n team-b | tail -10
 
-# team-b-cross-def: node role denied by team-a repo policy
-kubectl describe pod -l app=team-b-cross-def -n team-b | tail -10
+# no-ecr-irsa-to-team-a: node role denied by team-a repo policy
+kubectl describe pod -l app=no-ecr-irsa-to-team-a -n no-ecr-irsa | tail -10
 ```
 
 <details>
-<summary>Expected output — team-a-cross (denied pull from team-b repo)</summary>
+<summary>Expected output: team-a-to-team-b (denied pull from team-b repo)</summary>
 
 ```
 Events:
   Type     Reason     Age                  From               Message
   ----     ------     ----                 ----               -------
-  Normal   Scheduled  3m32s                default-scheduler  Successfully assigned team-a/team-a-cross-xxxxx to ip-10-0-1-17.ec2.internal
-  Normal   Pulling    35s (x5 over 3m31s)  kubelet            Pulling image "12345EXAMPLE.dkr.ecr.us-east-1.amazonaws.com/team-b/nginxb:latest"
+  Normal   Scheduled  3m32s                default-scheduler  Successfully assigned team-a/team-a-to-team-b-xxxxx to ip-10-0-1-17.ec2.internal
+  Normal   Pulling    35s (x5 over 3m31s)  kubelet            Pulling image "12345EXAMPLE.dkr.ecr.us-east-1.amazonaws.com/team-b/app:latest"
   Warning  Failed     35s (x5 over 3m31s)  kubelet            Failed to pull image: 403 Forbidden
   Warning  Failed     35s (x5 over 3m31s)  kubelet            Error: ErrImagePull
   Normal   BackOff    9s (x12 over 3m30s)  kubelet            Back-off pulling image
@@ -274,7 +288,7 @@ kubectl debug node/$NODE -it --image=ubuntu -- \
 
 </details>
 
-A single provider handles all ECR registries. The `tokenAttributes` block tells the kubelet to project a ServiceAccount token for every image pull. The provider then checks internally whether the SA has an `ecr-role-arn` annotation — if yes, it assumes that role; if no, it falls back to the node role.
+This block shows the credential provider configuration applied to EKS nodes at boot time. The `tokenAttributes` block tells the kubelet to project a ServiceAccount token for every image pull. The provider then checks whether the SA has an `ecr-role-arn` annotation: if present, it assumes that role; otherwise, it falls back to the node role.
 
 ### 9. Cleanup
 
@@ -296,7 +310,7 @@ Delete K8s resources, then destroy infrastructure:
 ├── README.md
 ├── scripts/
 │   ├── create-infra.sh       # terraform init + apply
-│   ├── build-push-images.sh  # push nginx to all 3 ECR repos
+│   ├── build-push-images.sh  # push nginx to all 4 ECR repos
 │   ├── apply-manifests.sh    # apply/delete K8s manifests with envsubst
 │   └── cleanup.sh            # terraform destroy
 ├── infra-tf/
@@ -310,19 +324,22 @@ Delete K8s resources, then destroy infrastructure:
 │   └── outputs.tf
 └── manifest/
     ├── namespaces.yaml
-    ├── team-a-own.yaml       # SA + Deployment: team-a → team-a/nginxa (✅ IRSA)
-    ├── team-a-cross.yaml     # SA + Deployment: team-a → team-b/nginxb (❌ cross team repo access denied)
-    ├── team-a-shared.yaml    # SA + Deployment: team-a → shared/nginx (✅ IRSA)
-    ├── team-b-own.yaml       # SA + Deployment: team-b → team-b/nginxb (✅ IRSA)
-    ├── team-b-cross.yaml     # SA + Deployment: team-b → team-a/nginxa (❌ cross team repo access  denied)
-    ├── team-b-shared.yaml    # SA + Deployment: team-b → shared/nginx (✅ IRSA)
-    ├── team-b-shared-def.yaml # Deployment: team-b → shared/nginx (✅ node fallback, default SA)
-    └── team-b-cross-def.yaml  # Deployment: team-b → team-a/nginxa (❌ node role denied, default SA)
+    ├── team-a-to-own.yaml             # team-a → team-a/app    (✅ IRSA)
+    ├── team-a-to-team-b.yaml          # team-a → team-b/app    (❌ denied by repo policy)
+    ├── team-a-to-shared.yaml          # team-a → shared/app    (✅ IRSA)
+    ├── team-a-to-baseline.yaml        # team-a → baseline/app  (✅ no repo policy)
+    ├── team-b-to-own.yaml             # team-b → team-b/app    (✅ IRSA)
+    ├── team-b-to-team-a.yaml          # team-b → team-a/app    (❌ denied by repo policy)
+    ├── team-b-to-shared.yaml          # team-b → shared/app    (✅ IRSA)
+    ├── team-b-to-baseline.yaml        # team-b → baseline/app  (✅ no repo policy)
+    ├── no-ecr-irsa-to-team-a.yaml     # default SA → team-a/app    (❌ denied by repo policy)
+    ├── no-ecr-irsa-to-shared.yaml     # default SA → shared/app    (❌ denied by repo policy)
+    └── no-ecr-irsa-to-baseline.yaml   # default SA → baseline/app  (✅ no repo policy)
 ```
 
 ## How It Works
 
-### Inside the credential provider — IRSA vs node role
+### Inside the credential provider: IRSA vs node role
 
 The decision between IRSA and node role happens **inside** the credential provider binary. When invoked, it runs this logic ([source](https://github.com/kubernetes/cloud-provider-aws/)):
 
@@ -339,18 +356,18 @@ The decision between IRSA and node role happens **inside** the credential provid
 
 3. Call STS AssumeRoleWithWebIdentity with the SA token and role ARN
    └─ Success → use the assumed role credentials for ECR GetAuthorizationToken
-   └─ Failure → error (NO fallback to node role — the image pull fails)
+   └─ Failure → error (NO fallback to node role; the image pull fails)
 ```
 
 Key points:
 
-- The provider checks specifically for `eks.amazonaws.com/ecr-role-arn`, **not** `eks.amazonaws.com/role-arn`. These are different annotations. Pods can still use annotation `role-arn` for runtime AWS API access — the ECR provider ignores that annotation entirely.
+- The provider checks specifically for `eks.amazonaws.com/ecr-role-arn`, **not** `eks.amazonaws.com/role-arn`. These are different annotations. Pods can still use `role-arn` for runtime AWS API access because the ECR provider ignores that annotation entirely.
 - If the annotation is not found, the provider checks the `AWS_ECR_ROLE_ARN` environment variable as a fallback ARN source. If neither is set, it uses the default credential chain (node role).
-- If the SA **does** have `ecr-role-arn` and `AssumeRoleWithWebIdentity` succeeds, those credentials are used — even if they lack ECR permissions for the target repo. There is no secondary fallback to the node role after a successful assume.
+- If the SA **does** have `ecr-role-arn` and `AssumeRoleWithWebIdentity` succeeds, those credentials are used even if they lack ECR permissions for the target repo. There is no secondary fallback to the node role after a successful assume.
 
 ### System pods (VPC CNI, kube-proxy, CoreDNS) are unaffected
 
-System pods have ServiceAccounts annotated with `eks.amazonaws.com/role-arn` (for runtime AWS API access like managing ENIs). The ECR credential provider ignores this annotation — it only looks for `ecr-role-arn`. Since system SAs don't have `ecr-role-arn`, the provider falls back to the node role for their image pulls. This is the same behavior as before KEP 4412.
+System pods have ServiceAccounts annotated with `eks.amazonaws.com/role-arn` (for runtime AWS API access like managing ENIs). The ECR credential provider ignores this annotation and only looks for `ecr-role-arn`. Since system SAs don't have `ecr-role-arn`, the provider falls back to the node role for their image pulls. This is the same behavior as before KEP 4412.
 
 
 ## Conclusion

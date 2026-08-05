@@ -25,9 +25,6 @@ module "eks" {
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
 
-  # Managed Node Groups — created separately (see aws_eks_node_group below)
-  # to ensure RBAC audience permissions are applied before nodes join.
-  eks_managed_node_groups = {}
 }
 
 # -----------------------------------------------------------------------------
@@ -163,10 +160,6 @@ module "eks_managed_node_group" {
       EOT
     }
   ]
-
-  // iam_role_additional_policies = {
-  //   ecr_pull = aws_iam_policy.node_ecr_pull.arn
-  // }
 
   depends_on = [
     kubernetes_cluster_role_binding.kubelet_ecr_credential_provider_audience

@@ -9,18 +9,23 @@ output "cluster_name" {
 }
 
 output "ecr_shared_repo_url" {
-  description = "ECR repository URL for shared/nginx"
-  value       = aws_ecr_repository.shared_nginx.repository_url
+  description = "ECR repository URL for shared/app"
+  value       = aws_ecr_repository.shared_repo.repository_url
 }
 
 output "ecr_team_a_repo_url" {
-  description = "ECR repository URL for team-a/nginxa"
-  value       = aws_ecr_repository.team_a_nginxa.repository_url
+  description = "ECR repository URL for team-a/app"
+  value       = aws_ecr_repository.team_a_repo.repository_url
 }
 
 output "ecr_team_b_repo_url" {
-  description = "ECR repository URL for team-b/nginxb"
-  value       = aws_ecr_repository.team_b_nginxb.repository_url
+  description = "ECR repository URL for team-b/app"
+  value       = aws_ecr_repository.team_b_repo.repository_url
+}
+
+output "ecr_baseline_repo_url" {
+  description = "ECR repository URL for baseline/app (no repository policy)"
+  value       = aws_ecr_repository.baseline_repo.repository_url
 }
 
 output "irsa_role_arn_team_a" {

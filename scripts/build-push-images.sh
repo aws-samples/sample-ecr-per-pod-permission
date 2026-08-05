@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Push nginx images to all three ECR namespaces: shared, team-a, team-b
+# Push nginx images to all four ECR namespaces: shared, team-a, team-b, baseline
 # Usage: ./scripts/build-push-images.sh
 # Requires: aws cli + one of: docker, podman, finch
 
@@ -33,12 +33,16 @@ aws ecr get-login-password --region "$REGION" | \
 # Pull nginx image (linux/amd64 for EKS nodes)
 $RUNTIME pull --platform linux/amd64 public.ecr.aws/nginx/nginx:latest
 
-# Tag and push to all three ECR repos
-REPOS=("shared/nginx" "team-a/nginxa" "team-b/nginxb")
+# Tag and push to all four ECR repos
+REPOS=("shared/app" "team-a/app" "team-b/app" "baseline/app")
 
 for repo in "${REPOS[@]}"; do
   $RUNTIME tag public.ecr.aws/nginx/nginx:latest "${ECR_REGISTRY}/${repo}:latest"
-  $RUNTIME push --platform linux/amd64 "${ECR_REGISTRY}/${repo}:latest"
+  if [[ "$RUNTIME" == "docker" ]]; then
+    $RUNTIME push "${ECR_REGISTRY}/${repo}:latest"
+  else
+    $RUNTIME push --platform linux/amd64 "${ECR_REGISTRY}/${repo}:latest"
+  fi
 done
 
-echo "Done. Images pushed to shared/nginx, team-a/nginxa, and team-b/nginxb."
+echo "Done. Images pushed to all repos: shared/app, team-a/app, team-b/app, baseline/app."

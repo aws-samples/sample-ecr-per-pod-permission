@@ -2,11 +2,11 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 # -----------------------------------------------------------------------------
-# ECR Repositories — three namespaces: shared, team-a, team-b
+# ECR Repositories — four namespaces: shared, team-a, team-b, baseline
 # -----------------------------------------------------------------------------
 
-resource "aws_ecr_repository" "shared_nginx" {
-  name                 = "shared/nginx"
+resource "aws_ecr_repository" "shared_repo" {
+  name                 = "shared/app"
   image_tag_mutability = "MUTABLE"
   force_delete         = true
 
@@ -19,8 +19,8 @@ resource "aws_ecr_repository" "shared_nginx" {
   }
 }
 
-resource "aws_ecr_repository" "team_a_nginxa" {
-  name                 = "team-a/nginxa"
+resource "aws_ecr_repository" "team_a_repo" {
+  name                 = "team-a/app"
   image_tag_mutability = "MUTABLE"
   force_delete         = true
 
@@ -33,8 +33,22 @@ resource "aws_ecr_repository" "team_a_nginxa" {
   }
 }
 
-resource "aws_ecr_repository" "team_b_nginxb" {
-  name                 = "team-b/nginxb"
+resource "aws_ecr_repository" "team_b_repo" {
+  name                 = "team-b/app"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+
+  encryption_configuration {
+    encryption_type = "KMS"
+  }
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
+resource "aws_ecr_repository" "baseline_repo" {
+  name                 = "baseline/app"
   image_tag_mutability = "MUTABLE"
   force_delete         = true
 
@@ -48,38 +62,16 @@ resource "aws_ecr_repository" "team_b_nginxb" {
 }
 
 # -----------------------------------------------------------------------------
-# ECR Repository Policies — team namespaces accessible only by their IRSA role
+# ECR Repository Policies
 # -----------------------------------------------------------------------------
 
-resource "aws_ecr_repository_policy" "team_a_nginxa" {
-  repository = aws_ecr_repository.team_a_nginxa.name
+resource "aws_ecr_repository_policy" "team_a_repo" {
+  repository = aws_ecr_repository.team_a_repo.name
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Sid       = "AllowTeamAIRSARoleOnly"
-        Effect    = "Allow"
-        Principal = { AWS = aws_iam_role.irsa_ecr_team_a.arn }
-        Action = [
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:BatchGetImage",
-          "ecr:GetDownloadUrlForLayer"
-        ]
-      },
-      {
-        Sid       = "AllowPushAccess"
-        Effect    = "Allow"
-        Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/Admin" }
-        Action = [
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:CompleteLayerUpload",
-          "ecr:InitiateLayerUpload",
-          "ecr:PutImage",
-          "ecr:UploadLayerPart"
-        ]
-      },
-      {
-        Sid       = "DenyAllOthers"
+        Sid       = "DenyAllExceptTeamAAndAdmin"
         Effect    = "Deny"
         Principal = "*"
         Action    = "ecr:*"
@@ -96,41 +88,44 @@ resource "aws_ecr_repository_policy" "team_a_nginxa" {
   })
 }
 
-resource "aws_ecr_repository_policy" "team_b_nginxb" {
-  repository = aws_ecr_repository.team_b_nginxb.name
+resource "aws_ecr_repository_policy" "team_b_repo" {
+  repository = aws_ecr_repository.team_b_repo.name
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Sid       = "AllowTeamBIRSARoleOnly"
-        Effect    = "Allow"
-        Principal = { AWS = aws_iam_role.irsa_ecr_team_b.arn }
-        Action = [
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:BatchGetImage",
-          "ecr:GetDownloadUrlForLayer"
-        ]
-      },
-      {
-        Sid       = "AllowPushAccess"
-        Effect    = "Allow"
-        Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/Admin" }
-        Action = [
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:CompleteLayerUpload",
-          "ecr:InitiateLayerUpload",
-          "ecr:PutImage",
-          "ecr:UploadLayerPart"
-        ]
-      },
-      {
-        Sid       = "DenyAllOthers"
+        Sid       = "DenyAllExceptTeamBAndAdmin"
         Effect    = "Deny"
         Principal = "*"
         Action    = "ecr:*"
         Condition = {
           StringNotEquals = {
             "aws:PrincipalArn" = [
+              aws_iam_role.irsa_ecr_team_b.arn,
+              "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/Admin"
+            ]
+          }
+        }
+      }
+    ]
+  })
+}
+
+
+resource "aws_ecr_repository_policy" "shared_repo" {
+  repository = aws_ecr_repository.shared_repo.name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "DenyAllExceptTeamATeamBAndAdmin"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "ecr:*"
+        Condition = {
+          StringNotEquals = {
+            "aws:PrincipalArn" = [
+              aws_iam_role.irsa_ecr_team_a.arn,
               aws_iam_role.irsa_ecr_team_b.arn,
               "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/Admin"
             ]

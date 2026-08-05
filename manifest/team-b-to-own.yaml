@@ -1,28 +1,28 @@
-# team-a pulling from team-a/ namespace with IRSA SA — should SUCCEED ✅
-# Uses team-a-own-sa → IRSA → AssumeRoleWithWebIdentity → team-a/* access
+# team-b pulling from team-b/ namespace with IRSA SA — should SUCCEED ✅
+# Uses sa-team-b-to-own → IRSA → AssumeRoleWithWebIdentity → team-b/app access
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: team-a-own-sa
-  namespace: team-a
+  name: sa-team-b-to-own
+  namespace: team-b
   annotations:
-    eks.amazonaws.com/ecr-role-arn: ${IRSA_ROLE_ARN_TEAM_A}
+    eks.amazonaws.com/ecr-role-arn: ${IRSA_ROLE_ARN_TEAM_B}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: team-a-own
-  namespace: team-a
+  name: team-b-to-own
+  namespace: team-b
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: team-a-own
+      app: team-b-to-own
   template:
     metadata:
       labels:
-        app: team-a-own
+        app: team-b-to-own
     spec:
       tolerations:
         - key: "ecr-pod-permission"
@@ -31,9 +31,9 @@ spec:
           effect: "NoSchedule"
       nodeSelector:
         node.kubernetes.io/ecr-pod-permission: "true"
-      serviceAccountName: team-a-own-sa
+      serviceAccountName: sa-team-b-to-own
       containers:
-        - name: nginx
-          image: ${ECR_TEAM_A_REPO_URL}:latest
+        - name: app
+          image: ${ECR_TEAM_B_REPO_URL}:latest
           ports:
             - containerPort: 80

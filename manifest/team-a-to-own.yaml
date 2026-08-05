@@ -1,13 +1,10 @@
-# team-a pulling from team-b/ namespace using team-a IRSA role — should FAIL ❌
-# Uses team-a-cross-sa → IRSA → AssumeRoleWithWebIdentity → gets team-a credentials
-# → ECR repo policy on team-b/nginxb denies team-a role → pull fails
-#
-# This proves: another team's IRSA role cannot pull private images.
+# team-a pulling from team-a/ namespace with IRSA SA — should SUCCEED ✅
+# Uses sa-team-a-to-own → IRSA → AssumeRoleWithWebIdentity → team-a/app access
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: team-a-cross-sa
+  name: sa-team-a-to-own
   namespace: team-a
   annotations:
     eks.amazonaws.com/ecr-role-arn: ${IRSA_ROLE_ARN_TEAM_A}
@@ -15,17 +12,17 @@ metadata:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: team-a-cross
+  name: team-a-to-own
   namespace: team-a
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: team-a-cross
+      app: team-a-to-own
   template:
     metadata:
       labels:
-        app: team-a-cross
+        app: team-a-to-own
     spec:
       tolerations:
         - key: "ecr-pod-permission"
@@ -34,9 +31,9 @@ spec:
           effect: "NoSchedule"
       nodeSelector:
         node.kubernetes.io/ecr-pod-permission: "true"
-      serviceAccountName: team-a-cross-sa
+      serviceAccountName: sa-team-a-to-own
       containers:
-        - name: nginx
-          image: ${ECR_TEAM_B_REPO_URL}:latest
+        - name: app
+          image: ${ECR_TEAM_A_REPO_URL}:latest
           ports:
             - containerPort: 80

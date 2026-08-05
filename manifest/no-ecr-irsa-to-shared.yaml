@@ -1,0 +1,33 @@
+# No ECR IRSA (default SA) pulling from shared/ namespace — should FAIL ❌
+# Uses default SA → no IRSA → falls back to node role
+# → ECR repo policy on shared/app denies node role → pull fails
+#
+# This proves: the node IAM role cannot pull shared images either —
+# only pods with a proper IRSA role listed in the repo policy can.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: no-ecr-irsa-to-shared
+  namespace: no-ecr-irsa
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: no-ecr-irsa-to-shared
+  template:
+    metadata:
+      labels:
+        app: no-ecr-irsa-to-shared
+    spec:
+      tolerations:
+        - key: "ecr-pod-permission"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+      nodeSelector:
+        node.kubernetes.io/ecr-pod-permission: "true"
+      containers:
+        - name: app
+          image: ${ECR_SHARED_REPO_URL}:latest
+          ports:
+            - containerPort: 80

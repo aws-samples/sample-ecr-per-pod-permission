@@ -87,8 +87,8 @@ The Terraform configuration creates:
 - AWS account with permissions to create VPC, EKS, ECR, IAM resources
 - [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.5
 - [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) v2
-- `kubectl`
-- A container runtime (docker, podman, or finch) for pushing images to ECR
+- [kubectl](https://kubernetes.io/docs/tasks/tools/)
+- A container runtime ([docker](https://www.docker.com/get-started/), [podman](https://podman.io/docs/installation), or [finch](https://runfinch.com/docs/getting-started/installation/)) for pushing images to ECR
 
 > **Warning:** This demo creates billable AWS resources including a NAT gateway, Amazon EKS cluster control plane, Amazon Elastic Compute Cloud (Amazon EC2) instances, and Amazon ECR repositories. Costs will accrue while resources are running. To minimize costs, complete the demo promptly and run the cleanup steps when finished. For current pricing, see the [Amazon EKS pricing page](https://aws.amazon.com/eks/pricing/), [Amazon EC2 pricing page](https://aws.amazon.com/ec2/pricing/), and [Amazon ECR pricing page](https://aws.amazon.com/ecr/pricing/).
 

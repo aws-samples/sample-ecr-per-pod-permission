@@ -1,5 +1,5 @@
 # team-b pulling from baseline/ namespace — should SUCCEED ✅
-# Uses team-b IRSA role → baseline/app has no ECR repo policy → pull succeeds
+# Uses team-b ECR pull role → baseline/app has no ECR repo policy → pull succeeds
 #
 # This proves: without a repository policy, any identity with IAM pull
 # permissions can access the image — the default behavior this demo contrasts.
@@ -10,7 +10,7 @@ metadata:
   name: sa-team-b-to-baseline
   namespace: team-b
   annotations:
-    eks.amazonaws.com/ecr-role-arn: ${IRSA_ROLE_ARN_TEAM_B}
+    eks.amazonaws.com/ecr-role-arn: ${ECR_PULL_ROLE_ARN_TEAM_B}
 ---
 apiVersion: apps/v1
 kind: Deployment

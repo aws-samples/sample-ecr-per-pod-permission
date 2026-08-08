@@ -1,5 +1,5 @@
-# No ECR IRSA (default SA) pulling from baseline/ namespace — should SUCCEED ✅
-# Uses default SA → no IRSA → falls back to node role
+# Node role (default SA, no ECR pull role) pulling from baseline/ namespace — should SUCCEED ✅
+# Uses default SA → no ECR pull role → falls back to node role
 # → No ECR repo policy on baseline/app → node role pull succeeds
 #
 # This proves: without a repository policy, even the node role can pull —
@@ -7,17 +7,17 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: no-ecr-irsa-to-baseline
-  namespace: no-ecr-irsa
+  name: node-role-to-baseline
+  namespace: node-role
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: no-ecr-irsa-to-baseline
+      app: node-role-to-baseline
   template:
     metadata:
       labels:
-        app: no-ecr-irsa-to-baseline
+        app: node-role-to-baseline
     spec:
       tolerations:
         - key: "ecr-pod-permission"

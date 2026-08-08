@@ -28,14 +28,14 @@ output "ecr_baseline_repo_url" {
   value       = aws_ecr_repository.baseline_repo.repository_url
 }
 
-output "irsa_role_arn_team_a" {
-  description = "IRSA role ARN for team-a ECR access"
-  value       = aws_iam_role.irsa_ecr_team_a.arn
+output "ecr_pull_role_arn_team_a" {
+  description = "ECR pull role ARN for team-a ECR access"
+  value       = aws_iam_role.ecr_pull_team_a.arn
 }
 
-output "irsa_role_arn_team_b" {
-  description = "IRSA role ARN for team-b ECR access"
-  value       = aws_iam_role.irsa_ecr_team_b.arn
+output "ecr_pull_role_arn_team_b" {
+  description = "ECR pull role ARN for team-b ECR access"
+  value       = aws_iam_role.ecr_pull_team_b.arn
 }
 
 output "configure_kubectl" {

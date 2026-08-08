@@ -1,8 +1,8 @@
-# team-a pulling from team-b/ namespace using team-a IRSA role — should FAIL ❌
-# Uses sa-team-a-to-team-b → IRSA → AssumeRoleWithWebIdentity → gets team-a credentials
+# team-a pulling from team-b/ namespace using team-a ECR pull role — should FAIL ❌
+# Uses sa-team-a-to-team-b → ECR pull role → AssumeRoleWithWebIdentity → gets team-a credentials
 # → ECR repo policy on team-b/app denies team-a role → pull fails
 #
-# This proves: another team's IRSA role cannot pull private images.
+# This proves: another team's ECR pull role cannot pull private images.
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -10,7 +10,7 @@ metadata:
   name: sa-team-a-to-team-b
   namespace: team-a
   annotations:
-    eks.amazonaws.com/ecr-role-arn: ${IRSA_ROLE_ARN_TEAM_A}
+    eks.amazonaws.com/ecr-role-arn: ${ECR_PULL_ROLE_ARN_TEAM_A}
 ---
 apiVersion: apps/v1
 kind: Deployment

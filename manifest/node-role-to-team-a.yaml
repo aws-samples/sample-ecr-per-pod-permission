@@ -1,22 +1,22 @@
-# No ECR IRSA (default SA) pulling from team-a/ namespace — should FAIL ❌
-# Uses default SA → no IRSA → falls back to node role
+# Node role (default SA, no ECR pull role) pulling from team-a/ namespace — should FAIL ❌
+# Uses default SA → no ECR pull role → falls back to node role
 # → ECR repo policy on team-a/app denies node role → pull fails
 #
 # This proves: the node IAM role cannot pull private team images.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: no-ecr-irsa-to-team-a
-  namespace: no-ecr-irsa
+  name: node-role-to-team-a
+  namespace: node-role
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: no-ecr-irsa-to-team-a
+      app: node-role-to-team-a
   template:
     metadata:
       labels:
-        app: no-ecr-irsa-to-team-a
+        app: node-role-to-team-a
     spec:
       tolerations:
         - key: "ecr-pod-permission"

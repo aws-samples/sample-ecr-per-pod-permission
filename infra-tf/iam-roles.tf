@@ -1,11 +1,11 @@
 # -----------------------------------------------------------------------------
-# IRSA Role — team-a: identity for team-a pods
+# ECR pull role — team-a: identity for team-a pods
 # Uses AWS-managed AmazonEC2ContainerRegistryPullOnly policy.
 # Per-repo scoping is enforced via ECR repository policies.
 # -----------------------------------------------------------------------------
 
-resource "aws_iam_role" "irsa_ecr_team_a" {
-  name = "${var.cluster_name}-irsa-ecr-team-a"
+resource "aws_iam_role" "ecr_pull_team_a" {
+  name = "${var.cluster_name}-ecr-pull-team-a"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -24,19 +24,19 @@ resource "aws_iam_role" "irsa_ecr_team_a" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "irsa_ecr_team_a" {
-  role       = aws_iam_role.irsa_ecr_team_a.name
+resource "aws_iam_role_policy_attachment" "ecr_pull_team_a" {
+  role       = aws_iam_role.ecr_pull_team_a.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly"
 }
 
 # -----------------------------------------------------------------------------
-# IRSA Role — team-b: identity for team-b pods
+# ECR pull role — team-b: identity for team-b pods
 # Uses AWS-managed AmazonEC2ContainerRegistryPullOnly policy.
 # Per-repo scoping is enforced via ECR repository policies.
 # -----------------------------------------------------------------------------
 
-resource "aws_iam_role" "irsa_ecr_team_b" {
-  name = "${var.cluster_name}-irsa-ecr-team-b"
+resource "aws_iam_role" "ecr_pull_team_b" {
+  name = "${var.cluster_name}-ecr-pull-team-b"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -55,7 +55,7 @@ resource "aws_iam_role" "irsa_ecr_team_b" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "irsa_ecr_team_b" {
-  role       = aws_iam_role.irsa_ecr_team_b.name
+resource "aws_iam_role_policy_attachment" "ecr_pull_team_b" {
+  role       = aws_iam_role.ecr_pull_team_b.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly"
 }

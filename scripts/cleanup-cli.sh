@@ -65,12 +65,12 @@ for OIDC_ARN in $(aws iam list-open-id-connect-providers --query "OpenIDConnectP
 done
 
 # -------------------------------------------------------------
-# 6. Delete IRSA IAM Roles & Policies
+# 6. Delete ECR pull IAM Roles & Policies
 # -------------------------------------------------------------
-echo "[6/9] Deleting IRSA roles and policies..."
+echo "[6/9] Deleting ECR pull roles and policies..."
 for TEAM in team-a team-b; do
-  ROLE_NAME="${CLUSTER_NAME}-irsa-ecr-${TEAM}"
-  POLICY_ARN="arn:aws:iam::${ACCOUNT_ID}:policy/${CLUSTER_NAME}-irsa-ecr-${TEAM}"
+  ROLE_NAME="${CLUSTER_NAME}-ecr-pull-${TEAM}"
+  POLICY_ARN="arn:aws:iam::${ACCOUNT_ID}:policy/${CLUSTER_NAME}-ecr-pull-${TEAM}"
 
   aws iam detach-role-policy --role-name "$ROLE_NAME" --policy-arn "$POLICY_ARN" 2>/dev/null || true
   aws iam delete-policy --policy-arn "$POLICY_ARN" 2>/dev/null || true

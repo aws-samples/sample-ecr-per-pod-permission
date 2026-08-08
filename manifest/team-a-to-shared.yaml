@@ -1,5 +1,5 @@
 # team-a pulling from shared/ namespace — should SUCCEED ✅
-# Uses team-a IRSA role → shared/app repo policy allows team-a role → pull succeeds
+# Uses team-a ECR pull role → shared/app repo policy allows team-a role → pull succeeds
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -7,7 +7,7 @@ metadata:
   name: sa-team-a-to-shared
   namespace: team-a
   annotations:
-    eks.amazonaws.com/ecr-role-arn: ${IRSA_ROLE_ARN_TEAM_A}
+    eks.amazonaws.com/ecr-role-arn: ${ECR_PULL_ROLE_ARN_TEAM_A}
 ---
 apiVersion: apps/v1
 kind: Deployment

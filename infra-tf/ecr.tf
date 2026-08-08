@@ -78,7 +78,7 @@ resource "aws_ecr_repository_policy" "team_a_repo" {
         Condition = {
           StringNotEquals = {
             "aws:PrincipalArn" = [
-              aws_iam_role.irsa_ecr_team_a.arn,
+              aws_iam_role.ecr_pull_team_a.arn,
               "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/Admin"
             ]
           }
@@ -101,7 +101,7 @@ resource "aws_ecr_repository_policy" "team_b_repo" {
         Condition = {
           StringNotEquals = {
             "aws:PrincipalArn" = [
-              aws_iam_role.irsa_ecr_team_b.arn,
+              aws_iam_role.ecr_pull_team_b.arn,
               "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/Admin"
             ]
           }
@@ -125,8 +125,8 @@ resource "aws_ecr_repository_policy" "shared_repo" {
         Condition = {
           StringNotEquals = {
             "aws:PrincipalArn" = [
-              aws_iam_role.irsa_ecr_team_a.arn,
-              aws_iam_role.irsa_ecr_team_b.arn,
+              aws_iam_role.ecr_pull_team_a.arn,
+              aws_iam_role.ecr_pull_team_b.arn,
               "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/Admin"
             ]
           }

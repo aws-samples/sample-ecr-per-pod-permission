@@ -1,5 +1,5 @@
-# team-b pulling from team-b/ namespace with IRSA SA — should SUCCEED ✅
-# Uses sa-team-b-to-own → IRSA → AssumeRoleWithWebIdentity → team-b/app access
+# team-b pulling from team-b/ namespace with an ECR pull role SA — should SUCCEED ✅
+# Uses sa-team-b-to-own → ECR pull role → AssumeRoleWithWebIdentity → team-b/app access
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -7,7 +7,7 @@ metadata:
   name: sa-team-b-to-own
   namespace: team-b
   annotations:
-    eks.amazonaws.com/ecr-role-arn: ${IRSA_ROLE_ARN_TEAM_B}
+    eks.amazonaws.com/ecr-role-arn: ${ECR_PULL_ROLE_ARN_TEAM_B}
 ---
 apiVersion: apps/v1
 kind: Deployment

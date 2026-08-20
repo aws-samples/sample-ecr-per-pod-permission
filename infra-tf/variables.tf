@@ -11,7 +11,7 @@ variable "cluster_name" {
 }
 
 variable "cluster_version" {
-  description = "Kubernetes version for EKS (>= 1.34 required for KEP 4412 Beta)"
+  description = "Kubernetes version for EKS (>= 1.35 required; ecr-credential-provider adds full KEP 4412 support in 1.35)"
   type        = string
   default     = "1.35"
 }

@@ -98,23 +98,10 @@ module "eks_managed_node_group" {
     "node.kubernetes.io/ecr-pod-permission" = "true"
   }
 
-  # Supply NodeConfig (endpoint, CA, CIDR) in user data so nodes
-  # don't call DescribeCluster at boot — avoids API throttling.
-  enable_bootstrap_user_data = true
+  # TF doesn't include NodeConfig data, EKS merges NodeConfig with TF User Data script
+  enable_bootstrap_user_data = false
 
   cloudinit_pre_nodeadm = [
-    // {
-    //   content_type = "application/node.eks.aws"
-    //   content      = <<-EOT
-    //     ---
-    //     apiVersion: node.eks.aws/v1alpha1
-    //     kind: NodeConfig
-    //     spec:
-    //       kubelet:
-    //         flags:
-    //           - --v=5
-    //   EOT
-    // },
     {
       content_type = "text/x-shellscript; charset=\"us-ascii\""
       content      = <<-EOT

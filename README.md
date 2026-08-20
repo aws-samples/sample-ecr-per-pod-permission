@@ -64,11 +64,11 @@ Pod without ecr-role-arn annotation (default SA):
 
 ### Requirements
 
-Three requirements must be met for per-pod credentials to work:
+Two requirements must be met for per-pod credentials to work:
 
-1. **Kubernetes >= 1.34.** The `KubeletServiceAccountTokenForCredentialProviders` feature gate is beta and enabled by default starting in 1.34. This is what allows the kubelet to project SA tokens to credential providers.
-2. **ECR credential provider with `tokenAttributes` support.** The provider must understand the `tokenAttributes` config and the `ecr-role-arn` annotation. Available in [cloud-provider-aws PR #1155](https://github.com/kubernetes/cloud-provider-aws/pull/1155) or later. EKS nodes running K8s 1.34+ include this version.
-3. **RBAC audience permission applied before nodes join.** The kubelet needs permission to request SA tokens with the `sts.amazonaws.com` audience. Without the ClusterRole/ClusterRoleBinding in place, the kubelet cannot project tokens and **all image pulls fail**, including system pods. The node will not become Ready.
+1. **EKS v1.35 or later (cluster and nodes).** The KEP 4412 feature gate reached beta and is enabled by default in EKS 1.34, but the `ecr-credential-provider` only added full support for the feature — including the fallback to the node role for pods without an `eks.amazonaws.com/ecr-role-arn` annotation — in v1.35. EKS v1.35 or later ensures the feature is fully functional end to end.
+
+2. **RBAC audience permission applied before nodes join.** The kubelet needs permission to request ServiceAccount tokens with the `sts.amazonaws.com` audience. Without the required `ClusterRole` and `ClusterRoleBinding` in place, the kubelet cannot project tokens, all image pulls fail, and nodes will not become Ready. In the walkthrough below, you'll create the required `ClusterRole` and `ClusterRoleBinding` before provisioning EKS nodes.
 
 ## Demo
 
@@ -95,13 +95,13 @@ The Terraform configuration creates:
 
 ### 1. Configure
 
-Edit `infra-tf/terraform.tfvars`:
+Edit `infra-tf/variables.tf`:
 
 | Variable | Description | Default |
 |---|---|---|
 | `aws_region` | AWS region for all resources | — |
 | `cluster_name` | EKS cluster name | — |
-| `cluster_version` | Kubernetes version (>= 1.34 for KEP 4412) | `1.35` |
+| `cluster_version` | Kubernetes version (>= 1.35 required — see [Requirements](#requirements)) | `1.35` |
 | `node_instance_type` | Amazon EC2 instance type for nodes | `t3.medium` |
 
 ### 2. Deploy infrastructure
@@ -316,7 +316,6 @@ Delete K8s resources, then destroy infrastructure:
 ├── infra-tf/
 │   ├── providers.tf
 │   ├── variables.tf
-│   ├── terraform.tfvars
 │   ├── vpc.tf
 │   ├── eks.tf                # EKS cluster + node group + RBAC
 │   ├── iam-roles.tf          # ECR pull roles + policies per team
@@ -378,4 +377,5 @@ Per-pod Amazon ECR image pull permissions on Amazon EKS provide fine-grained acc
 
 - [KEP 4412 — Projected Service Account Tokens for Kubelet Image Credential Providers](https://www.kubernetes.dev/resources/keps/4412/)
 - [Kubernetes v1.34: SA Tokens for Image Pulls Beta](https://kubernetes.io/blog/2025/09/03/kubernetes-v1-34-sa-tokens-image-pulls-beta/)
-- [AWS ECR Credential Provider — ServiceAccountToken Support](https://github.com/kubernetes/cloud-provider-aws/pull/1155)
+- [AWS ECR Credential Provider — ServiceAccountToken Support (PR #1155)](https://github.com/kubernetes/cloud-provider-aws/pull/1155)
+- [AWS ECR Credential Provider — fall back to node role for unannotated pods (PR #1281)](https://github.com/kubernetes/cloud-provider-aws/pull/1281)

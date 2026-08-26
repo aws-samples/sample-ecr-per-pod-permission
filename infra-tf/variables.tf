@@ -21,3 +21,9 @@ variable "node_instance_type" {
   type        = string
   default     = "t3.medium"
 }
+
+variable "use_bottlerocket" {
+  description = "Whenever use Bottlerocket as the OS for Managed Node Groups"
+  type = bool
+  default = true
+}

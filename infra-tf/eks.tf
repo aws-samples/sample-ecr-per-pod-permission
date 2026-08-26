@@ -33,7 +33,7 @@ module "eks" {
 # with the "sts.amazonaws.com" audience for the credential provider.
 # -----------------------------------------------------------------------------
 
-resource "kubernetes_cluster_role" "ecr_credential_provider_audience" {
+resource "kubernetes_cluster_role_v1" "ecr_credential_provider_audience" {
   metadata {
     name = "ecr-credential-provider-audience"
   }
@@ -45,7 +45,7 @@ resource "kubernetes_cluster_role" "ecr_credential_provider_audience" {
   }
 }
 
-resource "kubernetes_cluster_role_binding" "kubelet_ecr_credential_provider_audience" {
+resource "kubernetes_cluster_role_binding_v1" "kubelet_ecr_credential_provider_audience" {
   metadata {
     name = "kubelet-ecr-credential-provider-audience"
   }
@@ -53,7 +53,7 @@ resource "kubernetes_cluster_role_binding" "kubelet_ecr_credential_provider_audi
   role_ref {
     api_group = "rbac.authorization.k8s.io"
     kind      = "ClusterRole"
-    name      = kubernetes_cluster_role.ecr_credential_provider_audience.metadata[0].name
+    name      = kubernetes_cluster_role_v1.ecr_credential_provider_audience.metadata[0].name
   }
 
   subject {
@@ -70,6 +70,7 @@ resource "kubernetes_cluster_role_binding" "kubelet_ecr_credential_provider_audi
 # -----------------------------------------------------------------------------
 
 module "eks_managed_node_group" {
+  count   = var.use_bottlerocket ? 0 : 1
   source  = "terraform-aws-modules/eks/aws//modules/eks-managed-node-group"
   version = "~> 21.0"
 
@@ -149,7 +150,7 @@ module "eks_managed_node_group" {
   ]
 
   depends_on = [
-    kubernetes_cluster_role_binding.kubelet_ecr_credential_provider_audience
+    kubernetes_cluster_role_binding_v1.kubelet_ecr_credential_provider_audience
   ]
 }
 

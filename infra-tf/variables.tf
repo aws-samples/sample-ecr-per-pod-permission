@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "cluster_name" {
   description = "Name of the EKS cluster"
   type        = string
-  default     = "ecr-pod-permission-test"
+  default     = "ecr-pod-permission-demo"
 }
 
 variable "cluster_version" {

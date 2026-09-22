@@ -26,9 +26,14 @@ else
 fi
 echo "Using container runtime: $RUNTIME"
 
-# Authenticate to ECR
+# Authenticate to private ECR (target registry)
 aws ecr get-login-password --region "$REGION" | \
   $RUNTIME login --username AWS --password-stdin "$ECR_REGISTRY"
+
+# Authenticate to public ECR (source registry) to avoid anonymous 403 / rate limits.
+# ecr-public is only available in us-east-1.
+aws ecr-public get-login-password --region us-east-1 | \
+  $RUNTIME login --username AWS --password-stdin public.ecr.aws
 
 # Pull nginx image (linux/amd64 for EKS nodes)
 $RUNTIME pull --platform linux/amd64 public.ecr.aws/nginx/nginx:latest
